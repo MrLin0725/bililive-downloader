@@ -2,25 +2,26 @@ package main
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
+
 	"net/url"
 	"strings"
-	"time"
 
-	"github.com/c2h5oh/datasize"
 	"github.com/gofrs/uuid"
 )
 
+// RecordPart represents a part of the whole livestream recording.
+// It's typically H.264 media stream encapsulated in a single FLV container.
 type RecordPart struct {
 	Url         string   `json:"url"`
 	Size        Size     `json:"size"`
 	Length      Duration `json:"length"`
 	BackupUrl   *string  `json:"backup_url,omitempty"`
 	PreviewInfo *string  `json:"preview_info,omitempty"`
-	filename    string   `json:"-"`
+	filename    string
 }
 
+// FileName returns the unique filename of this part.
 func (rp *RecordPart) FileName() string {
 	if rp.filename == "" {
 		u, err := url.Parse(rp.Url)
@@ -43,7 +44,8 @@ type Quality struct {
 	Name   string `json:"desc"`
 }
 
-type RecordInfo struct {
+// RecordParts represents minimal media info about parts of a complete recording.
+type RecordParts struct {
 	List                 []RecordPart `json:"list"`
 	Size                 Size         `json:"size"`
 	Length               Duration     `json:"length"`
@@ -51,7 +53,7 @@ type RecordInfo struct {
 	Qualities            []Quality    `json:"qn_desc"`
 }
 
-func (ri *RecordInfo) Quality() string {
+func (ri *RecordParts) Quality() string {
 	for _, q := range ri.Qualities {
 		if q.Number == ri.CurrentQualityNumber {
 			return q.Name
@@ -60,11 +62,12 @@ func (ri *RecordInfo) Quality() string {
 	return "未知"
 }
 
+// ApiResponse wraps general HTTP API response from bilibili.
 type ApiResponse struct {
-	Code    int        `json:"code"`
-	Message string     `json:"message"`
-	Ttl     int        `json:"ttl"`
-	Data    RecordInfo `json:"data"`
+	Code    int             `json:"code"`
+	Message string          `json:"message"`
+	Ttl     int             `json:"ttl"`
+	Data    json.RawMessage `json:"data"` // No generics, no union types, :(
 }
 
 type LiveRecordInfo struct {
@@ -73,54 +76,6 @@ type LiveRecordInfo struct {
 	EndTimestamp   int64  `json:"end_timestamp"`
 }
 
-type VideoData struct {
-	LiveRecord LiveRecordInfo `json:"live_record_info"`
-}
-
-type VideoApiResponse struct {
-	Code    int       `json:"code"`
-	Message string    `json:"message"`
-	Ttl     int       `json:"ttl"`
-	Data    VideoData `json:"data"`
-}
-
-type Duration struct {
-	time.Duration
-}
-
-func (d *Duration) UnmarshalJSON(b []byte) error {
-	var v interface{}
-	if err := json.Unmarshal(b, &v); err != nil {
-		return err
-	}
-	switch value := v.(type) {
-	case float64:
-		// value is in `ms` (typical Javascript), but Duration type conversion wants `ns`.
-		d.Duration = time.Duration(value * 1_000_000)
-		return nil
-	default:
-		return errors.New("invalid duration")
-	}
-}
-
-type Size struct {
-	datasize.ByteSize
-}
-
-func (s *Size) UnmarshalJSON(b []byte) error {
-	var v interface{}
-	if err := json.Unmarshal(b, &v); err != nil {
-		return err
-	}
-	switch value := v.(type) {
-	case float64:
-		s.ByteSize = datasize.ByteSize(value)
-		return nil
-	default:
-		return errors.New("invalid duration")
-	}
-}
-
-func (s Size) String() string {
-	return s.HumanReadable()
+type LiveRecord struct {
+	Info LiveRecordInfo `json:"live_record_info"`
 }
